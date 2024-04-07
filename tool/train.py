@@ -9,7 +9,7 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as thfn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
@@ -27,7 +27,8 @@ cv2.setNumThreads(0)
 def get_parser():
     parser = argparse.ArgumentParser(description='PyTorch Semantic Segmentation')
     parser.add_argument('--config', type=str, default='config/ade20k/ade20k_pspnet50.yaml', help='config file')
-    parser.add_argument('opts', help='see config/ade20k/ade20k_pspnet50.yaml for all options', default=None, nargs=argparse.REMAINDER)
+    parser.add_argument('opts', help='see config/ade20k/ade20k_pspnet50.yaml for all options',
+                        default=None, nargs=argparse.REMAINDER)
     args = parser.parse_args()
     assert args.config is not None
     cfg = config.load_cfg_from_cfg_file(args.config)
@@ -204,7 +205,9 @@ def main_worker(gpu, ngpus_per_node, argss):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
     else:
         train_sampler = None
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=(train_sampler is None), num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=(train_sampler is None),
+                                               num_workers=args.workers, pin_memory=True,
+                                               sampler=train_sampler, drop_last=True)
     if args.evaluate:
         val_transform = transform.Compose([
             transform.Crop([args.train_h, args.train_w], crop_type='center', padding=mean, ignore_label=args.ignore_label),
@@ -215,7 +218,8 @@ def main_worker(gpu, ngpus_per_node, argss):
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_data)
         else:
             val_sampler = None
-        val_loader = torch.utils.data.DataLoader(val_data, batch_size=args.batch_size_val, shuffle=False, num_workers=args.workers, pin_memory=True, sampler=val_sampler)
+        val_loader = torch.utils.data.DataLoader(val_data, batch_size=args.batch_size_val, shuffle=False,
+                                                 num_workers=args.workers, pin_memory=True, sampler=val_sampler)
 
     for epoch in range(args.start_epoch, args.epochs):
         epoch_log = epoch + 1
@@ -263,7 +267,8 @@ def train(train_loader, model, optimizer, epoch):
             h = int((target.size()[1] - 1) / 8 * args.zoom_factor + 1)
             w = int((target.size()[2] - 1) / 8 * args.zoom_factor + 1)
             # 'nearest' mode doesn't support align_corners mode and 'bilinear' mode is fine for downsampling
-            target = F.interpolate(target.unsqueeze(1).float(), size=(h, w), mode='bilinear', align_corners=True).squeeze(1).long()
+            target = (thfn.interpolate(target.unsqueeze(1).float(), size=(h, w), mode='bilinear', align_corners=True)
+                      .squeeze(1).long())
         input = input.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
         output, main_loss, aux_loss = model(input, target)
@@ -336,7 +341,8 @@ def train(train_loader, model, optimizer, epoch):
     mAcc = np.mean(accuracy_class)
     allAcc = sum(intersection_meter.sum) / (sum(target_meter.sum) + 1e-10)
     if main_process():
-        logger.info('Train result at epoch [{}/{}]: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}.'.format(epoch+1, args.epochs, mIoU, mAcc, allAcc))
+        logger.info('Train result at epoch [{}/{}]: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}.'
+                    .format(epoch+1, args.epochs, mIoU, mAcc, allAcc))
     return main_loss_meter.avg, mIoU, mAcc, allAcc
 
 
@@ -358,7 +364,7 @@ def validate(val_loader, model, criterion):
         target = target.cuda(non_blocking=True)
         output = model(input)
         if args.zoom_factor != 8:
-            output = F.interpolate(output, size=target.size()[1:], mode='bilinear', align_corners=True)
+            output = thfn.interpolate(output, size=target.size()[1:], mode='bilinear', align_corners=True)
         loss = criterion(output, target)
 
         n = input.size(0)
