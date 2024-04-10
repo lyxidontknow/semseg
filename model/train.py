@@ -1,15 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import albumentations as A
+import albumentations as album
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 from model.pspnet import PSPNet
-from pytorch.benchmarks.dynamo.check_accuracy import check_accuracy
+# from pytorch.benchmarks.dynamo.check_accuracy import check_accuracy
 from utils import get_loaders
-
-import numpy as np
-import random
+import os
 
 
 def train_fn(loader, model, loss_fn, optimizer, scaler):
@@ -34,7 +32,7 @@ def train_fn(loader, model, loss_fn, optimizer, scaler):
     return total_loss/len(loader)
 
 
-def check_accuracy(loader, model, DEVICE="cuda"):
+def check_accuracy(loader, model, device="cuda"):
     num_correct = 0
     num_pixels = 0
     dice_score = 0
@@ -42,8 +40,8 @@ def check_accuracy(loader, model, DEVICE="cuda"):
 
     with torch.no_grad():
         for x, y in loader:
-            x = x.to(DEVICE)
-            y = y.unsqueeze(1).to(DEVICE)
+            x = x.to(device)
+            y = y.unsqueeze(1).to(device)
             predictions = torch.sigmoid(model(x))
             predictions = (predictions > 0.5).float()
             num_correct += (predictions == y).sum()
@@ -62,13 +60,13 @@ def check_accuracy(loader, model, DEVICE="cuda"):
 
 
 def main():
-    train_transform = A.Compose(
+    train_transform = album.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.1),
-            A.Normalize(
+            album.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            album.Rotate(limit=35, p=1.0),
+            album.HorizontalFlip(p=0.5),
+            album.VerticalFlip(p=0.1),
+            album.Normalize(
                 mean=[0.0, 0.0, 0.0],
                 std=[1.0, 1.0, 1.0],
                 max_pixel_value=255.0,
@@ -76,10 +74,10 @@ def main():
             ToTensorV2(),
         ],)
 
-    val_transform = A.Compose(
+    val_transform = album.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Normalize(
+            album.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            album.Normalize(
                 mean=[0.0, 0.0, 0.0],
                 std=[1.0, 1.0, 1.0],
                 max_pixel_value=255.0,
@@ -100,7 +98,7 @@ def main():
         train_loss = train_fn(train_loader, model, loss_fn, optimizer, scaler)
         train_losses.append(train_loss)
 
-        accuracy, dice = check_accuracy(train_loader, model, DEVICE="cuda")
+        accuracy, dice = check_accuracy(train_loader, model, device="cuda")
         val_acc.append(accuracy)
         val_dice.append(dice)
 
@@ -114,13 +112,14 @@ if __name__ == '__main__':
     NUM_WORKERS = 2
     PIN_MEMORY = True
     LOAD_MODEL = False
-    DEVICE = "cuda"
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(DEVICE)
 
-    TRAIN_IMG_DIR = "./data/gtFine_trainvaltest/getFine/train/aachen"
-    TRAIN_MASK_DIR = "./data/gtFine_trainvaltest/getFine/train/aachen"
-    VAL_IMG_DIR = "./data/gtFine_trainvaltest/getFine/val/frankfurt"
-    VAL_MASK_DIR = "./data/gtFine_trainvaltest/getFine/val/frankfurt"
+    DATA_DIR = "./dataset/cityscapes/gtFine_trainvaltest/gtFine"
+    TRAIN_IMG_DIR = os.path.join(DATA_DIR, "train/aachen")
+    TRAIN_MASK_DIR = os.path.join(DATA_DIR, "train/aachen")
+    VAL_IMG_DIR = os.path.join(DATA_DIR, "val/frankfurt")
+    VAL_MASK_DIR = os.path.join(DATA_DIR, "val/frankfurt")
 
     IMAGE_HEIGHT = 160
     IMAGE_WIDTH = 240
